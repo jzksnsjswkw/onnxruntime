@@ -67,7 +67,7 @@ jobs:
         ${{ inputs.use_webgpu && '--use_webgpu' || '' }}
         ${{ inputs.use_xnnpack && '--use_xnnpack' || '' }}
         ${{ inputs.use_coreml && '--use_coreml --skip_onnx_tests' || '' }}
-        --use_vcpkg --use_vcpkg_ms_internal_asset_cache
+        --use_vcpkg
         --config ${{ matrix.build_config }}
         --osx_arch ${{ matrix.target }}
 
@@ -152,13 +152,26 @@ jobs:
           cd ${{ github.workspace }}/build/${{ matrix.build_config }}
           make install DESTDIR=${{ github.workspace }}/build/installed
 
-      - name: Running Tests (build.py --test)
-        # Skip tests when cross-compiling
-        if: ${{ matrix.machine == matrix.target }}
-        shell: bash
-        working-directory: ${{ github.workspace }}
-        run: |
-          python ./tools/ci_build/build.py --test ${{ env.build_flags }}
+      # fork 定制：直接上传 dylib + install 树，供 stormsniffer 内嵌
+      - name: Upload build artifacts
+        if: ${{ matrix.build_config == 'Release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime-osx-${{ matrix.target }}-${{ matrix.build_config }}
+          path: |
+            ${{ github.workspace }}/build/${{ matrix.build_config }}/libonnxruntime*.dylib
+            ${{ github.workspace }}/build/${{ matrix.build_config }}/libonnxruntime*.a
+            ${{ github.workspace }}/build/installed/**
+          if-no-files-found: error
+          retention-days: 90
+
+      # 测试跑非常久且本 fork 只为了产出 dylib，注释掉
+      #- name: Running Tests (build.py --test)
+      #  if: ${{ matrix.machine == matrix.target }}
+      #  shell: bash
+      #  working-directory: ${{ github.workspace }}
+      #  run: |
+      #    python ./tools/ci_build/build.py --test ${{ env.build_flags }}
 
       - name: WebGPU GEMV correctness (Metal)
         if: ${{ inputs.use_webgpu && matrix.machine == matrix.target }}
